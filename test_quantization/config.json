@@ -1,0 +1,16 @@
+{
+  "model_size": "7B",
+  "output_dir": "./test_quantization",
+  "max_samples": 2,
+  "batch_size": 1,
+  "max_new_tokens": 512,
+  "temperature": 0.7,
+  "use_llm_judge": false,
+  "judge_model": null,
+  "save_responses": true,
+  "device": "auto",
+  "use_flash_attention": false,
+  "quantization": "bitsandbytes",
+  "bits": 4,
+  "timestamp": "2026-01-18T17:42:35.177146"
+}

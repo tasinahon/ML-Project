@@ -1,0 +1,19 @@
+{
+  "model_size": "7B",
+  "output_dir": "./results",
+  "max_samples": 4031,
+  "batch_size": 1,
+  "max_new_tokens": 512,
+  "temperature": 0.7,
+  "use_llm_judge": false,
+  "judge_model": null,
+  "save_responses": true,
+  "device": "auto",
+  "use_flash_attention": false,
+  "quantization": null,
+  "bits": 4,
+  "pruning": "wanda",
+  "sparsity": 0.5,
+  "num_calibration_samples": 128,
+  "timestamp": "2026-01-19T00:14:43.644333"
+}

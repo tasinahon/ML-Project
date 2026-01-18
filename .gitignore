@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Model cache
+.cache/
+*.safetensors
+*.bin
+*.pt
+
+# HuggingFace
+.huggingface/
+
+# Logs
+logs/
+*.log
+nohup.out
+
+# Results (optional - comment out if you want to commit results)
+# results/
+# *.png
+# *.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
