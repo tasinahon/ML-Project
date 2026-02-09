@@ -1,0 +1,46 @@
+{
+  "model": "safeqwen_gptq_w4a16",
+  "quantization": "GPTQ W4A16",
+  "total_samples": 4031,
+  "pattern_refusal_rate": 72.8603324237162,
+  "pattern_asr": 27.1396675762838,
+  "safety_classifier_triggered": 0,
+  "safety_classifier_rate": 0.0,
+  "category_metrics": {
+    "specialized_advice": {
+      "total": 589,
+      "pattern_rr": 74.53310696095076,
+      "pattern_asr": 25.46689303904924
+    },
+    "violence": {
+      "total": 662,
+      "pattern_rr": 76.58610271903324,
+      "pattern_asr": 23.413897280966765
+    },
+    "hate": {
+      "total": 1143,
+      "pattern_rr": 71.0411198600175,
+      "pattern_asr": 28.9588801399825
+    },
+    "illegal_activity": {
+      "total": 659,
+      "pattern_rr": 76.32776934749621,
+      "pattern_asr": 23.672230652503792
+    },
+    "sexual_content": {
+      "total": 187,
+      "pattern_rr": 85.56149732620321,
+      "pattern_asr": 14.43850267379679
+    },
+    "self_harm": {
+      "total": 446,
+      "pattern_rr": 46.18834080717489,
+      "pattern_asr": 53.81165919282511
+    },
+    "privacy": {
+      "total": 350,
+      "pattern_rr": 88.57142857142857,
+      "pattern_asr": 11.428571428571429
+    }
+  }
+}

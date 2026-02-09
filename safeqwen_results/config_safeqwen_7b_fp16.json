@@ -1,0 +1,12 @@
+{
+  "model_size": "7B",
+  "quantization": null,
+  "bits": 4,
+  "max_samples": 4031,
+  "use_gemma_judge": true,
+  "gemma_model": "google/gemma-2-2b-it",
+  "enable_safety_classifier": true,
+  "memory_cleanup_interval": 10,
+  "save_interval": 0,
+  "output_dir": "./safeqwen_results"
+}

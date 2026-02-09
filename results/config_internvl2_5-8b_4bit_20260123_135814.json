@@ -1,0 +1,8 @@
+{
+  "model": "OpenGVLab/InternVL2_5-8B",
+  "precision": "quantized",
+  "quantization": "4bit",
+  "total_samples": 4031,
+  "timestamp": "20260123_135814",
+  "device": "auto"
+}

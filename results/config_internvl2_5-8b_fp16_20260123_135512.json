@@ -1,0 +1,8 @@
+{
+  "model": "OpenGVLab/InternVL2_5-8B",
+  "precision": "fp16",
+  "quantization": "none",
+  "total_samples": 4031,
+  "timestamp": "20260123_135512",
+  "device": "auto"
+}
