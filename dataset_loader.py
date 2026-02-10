@@ -10,6 +10,13 @@ from PIL import Image
 from huggingface_hub import hf_hub_download
 
 
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+TOKEN = os.getenv("HFKEY")
+
 class HoliSafeBenchLoader:
     """Loader for HoliSafe-Bench dataset"""
     
@@ -30,7 +37,7 @@ class HoliSafeBenchLoader:
         
         if self.use_hf_api:
             # Option 1: Using Hugging Face Datasets API (Recommended)
-            self.dataset = load_dataset("etri-vilab/holisafe-bench")
+            self.dataset = load_dataset("etri-vilab/holisafe-bench", token=TOKEN)
             print(f"Loaded dataset with {len(self.dataset['test'])} samples")
         else:
             # Option 2: Direct File Access
@@ -62,7 +69,7 @@ class HoliSafeBenchLoader:
                 'query': sample['query'],
                 'category': sample.get('category', 'Unknown'),
                 'subcategory': sample.get('subcategory', 'Unknown'),
-                'safeness_combination': sample.get('safeness_combination', 'Unknown'),
+                'type': sample.get('type', 'Unknown'),
                 'expected_response': sample.get('expected_response', ''),
                 'is_safe': sample.get('is_safe', None)
             }
@@ -82,7 +89,7 @@ class HoliSafeBenchLoader:
                 'query': sample['query'],
                 'category': sample.get('category', 'Unknown'),
                 'subcategory': sample.get('subcategory', 'Unknown'),
-                'safeness_combination': sample.get('safeness_combination', 'Unknown'),
+                'type': sample.get('type', 'Unknown'),
                 'expected_response': sample.get('expected_response', ''),
                 'is_safe': sample.get('is_safe', None)
             }
@@ -99,7 +106,7 @@ class HoliSafeBenchLoader:
         stats = {
             'total_samples': len(self),
             'categories': {},
-            'safeness_combinations': {}
+            'types': {}
         }
         
         for i in range(len(self)):
@@ -110,8 +117,8 @@ class HoliSafeBenchLoader:
             stats['categories'][category] = stats['categories'].get(category, 0) + 1
             
             # Count safeness combinations
-            safeness = sample['safeness_combination']
-            stats['safeness_combinations'][safeness] = stats['safeness_combinations'].get(safeness, 0) + 1
+            safeness = sample['type']
+            stats['types'][safeness] = stats['types'].get(safeness, 0) + 1
         
         return stats
 
@@ -125,7 +132,7 @@ if __name__ == "__main__":
     stats = loader.get_statistics()
     print(f"Total samples: {stats['total_samples']}")
     print(f"\nCategories: {stats['categories']}")
-    print(f"\nSafeness combinations: {stats['safeness_combinations']}")
+    print(f"\nSafeness combinations: {stats['types']}")
     
     print("\n=== Sample Data ===")
     sample = loader.get_sample(0)
@@ -133,5 +140,5 @@ if __name__ == "__main__":
     print(f"Query: {sample['query']}")
     print(f"Category: {sample['category']}")
     print(f"Subcategory: {sample['subcategory']}")
-    print(f"Safeness: {sample['safeness_combination']}")
+    print(f"Safeness: {sample['type']}")
     print(f"Image size: {sample['image'].size}")
