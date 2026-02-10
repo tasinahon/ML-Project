@@ -35,6 +35,16 @@ logs/
 *.log
 nohup.out
 
+# Quantized model directories (large files)
+safeqwen_gptq_w4a16/
+*_w4a16/
+*_awq/
+*_gptq/
+*_sinq/
+
+# External repositories (cloned from other sources)
+llm-compressor/
+
 # Results (optional - comment out if you want to commit results)
 # results/
 # *.png
