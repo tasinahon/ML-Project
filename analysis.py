@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Optional, List
 import json
 import datetime
+from collections import defaultdict
 
 # from torch import nn
 
@@ -47,7 +48,8 @@ PROPERTIES = [
         model="safeqwen_7b",
         quantization="fp16",
         mitigation=None,
-        response=Path("safeqwen_results/responses_safeqwen_7b_fp16_patched.json"),
+        response=Path(
+            "safeqwen_results/responses_safeqwen_7b_fp16_patched_filtered.json"),
         metrics=Path("safeqwen_results/metrics_safeqwen_7b_fp16.json"),
         config=Path("safeqwen_results/config_safeqwen_7b_fp16.json"),
     ),
@@ -56,7 +58,7 @@ PROPERTIES = [
         quantization="bitsandbytes4bit_fp4",  # Matches "fp4"
         mitigation=None,
         response=Path(
-            "safeqwen_results/responses_safeqwen_7b_bitsandbytes4bit_fp4.json"),
+            "safeqwen_results/responses_safeqwen_7b_bitsandbytes4bit_fp4_filtered.json"),
         metrics=Path(
             "safeqwen_results/metrics_safeqwen_7b_bitsandbytes4bit_fp4.json"),
         config=Path(
@@ -67,7 +69,7 @@ PROPERTIES = [
         quantization="bitsandbytes4bit_fp4",  # Matches "fp4"
         mitigation="ras_full",
         response=Path(
-            "safeqwen_results/responses_safeqwen_7b_bitsandbytes4bit_fp4_ras_full.json"),
+            "safeqwen_results/responses_safeqwen_7b_bitsandbytes4bit_fp4_ras_full_filtered.json"),
         metrics=Path(
             "safeqwen_results/metrics_safeqwen_7b_bitsandbytes4bit_fp4_ras_full.json"),
     ),
@@ -76,7 +78,7 @@ PROPERTIES = [
         quantization="bitsandbytes4bit",  # Matches "nf4"
         mitigation=None,
         response=Path(
-            "safeqwen_results/responses_safeqwen_7b_bitsandbytes4bit.json"),
+            "safeqwen_results/responses_safeqwen_7b_bitsandbytes4bit_filtered.json"),
         metrics=Path(
             "safeqwen_results/metrics_safeqwen_7b_bitsandbytes4bit.json"),
         config=Path(
@@ -87,7 +89,7 @@ PROPERTIES = [
         quantization="fp16",
         mitigation="ras_full",
         response=Path(
-            "safeqwen_results/responses_safeqwen_7b_fp16_ras_full.json"),
+            "safeqwen_results/responses_safeqwen_7b_fp16_ras_full_filtered.json"),
         metrics=Path(
             "safeqwen_results/metrics_safeqwen_7b_fp16_ras_full.json"),
     )
@@ -172,7 +174,8 @@ def filter_broken_rows(data: List[dict], brokenset: set) -> List[dict]:
     return filtered_data
 
 
-ID_TO_SAFENESS_MAPPING = build_index_to_safenesscombination_mapping()
+# ID_TO_SAFENESS_MAPPING = build_index_to_safenesscombination_mapping()
+ID_TO_SAFENESS_MAPPING = None
 
 
 def get_safeness_combination(sample_id: int) -> Optional[str]:
@@ -256,12 +259,21 @@ def analyze_by_type(experiment: Properties) -> None:
 
 def all_analysis():
 
-    def run_analysis_wrapper(quantization: str, mitigation: Optional[str]):
+    def run_analysis_wrapper(quantization: str, mitigation: Optional[str], patched: bool = True, filtered: bool = True):
         experiment = get_experiment(
             quantization=quantization, mitigation=mitigation)
         assert experiment is not None, f"Experiment not found for quantization={quantization}, mitigation={mitigation}"
         merged = analyze_by_type(experiment)
-        filename = f"analysis_{experiment.model}_{experiment.quantization}_{experiment.mitigation}.json" if experiment.mitigation else f"analysis_{experiment.model}_{experiment.quantization}.json"
+
+        modifiers = [
+            mitigation if mitigation else "",
+            "patched" if patched else "",
+            "filtered" if filtered else ""
+        ]
+        modifier = "_" + "_".join([m for m in modifiers if m]) if any(modifiers) else ""
+    
+        filename = f"analysis_{experiment.model}_{experiment.quantization}{modifier}.json"
+
         with open(RESULTS_BASE_PATH / filename, 'w') as f:
             json.dump(merged, f, indent=4)
 
@@ -272,20 +284,114 @@ def all_analysis():
     run_analysis_wrapper(quantization="fp4", mitigation="ras_full")
 
 
-def patch_full_response():
-
-    original_data = load_json(RESULTS_BASE_PATH / "responses_safeqwen_7b_fp16.json")
+def find_sampleid_to_id_mapping_optimized():
+    # Load data
+    original_data = load_json(
+        RESULTS_BASE_PATH / "responses_safeqwen_7b_fp16.json")
     assert original_data is not None, "Failed to load original data."
 
-    # get entries with key 'sample_id' and no 'id' key
-    broken_entries = [entry for entry in original_data if 'sample_id' in entry and 'id' not in entry]
-    print(f"Found {len(broken_entries)} broken entries with 'sample_id' but no 'id'.")
+    ras_data = load_json(RESULTS_BASE_PATH /
+                         "responses_safeqwen_7b_fp16_ras_full.json")
+    assert ras_data is not None, "Failed to load RAS data."
 
-    # TODO:
+    # 1. OPTIMIZATION: Map RAS IDs to their absolute indices for instant O(1) lookups
+    ras_id_to_idx = {row['id']: idx for idx,
+                     row in enumerate(ras_data) if 'id' in row}
 
-    patched_data = []
+    uncorrupted_original_indices = set()
+    uncorrupted_ras_indices = set()
+
+    # 2. OPTIMIZATION: Single pass to find uncorrupted data
+    for oi, oe in enumerate(original_data):
+        if 'id' in oe and oe['id'] in ras_id_to_idx:
+            uncorrupted_original_indices.add(oi)
+            uncorrupted_ras_indices.add(ras_id_to_idx[oe['id']])
+
+    # Determine remaining/corrupted indices
+    corrupted_original_indices = [i for i in range(
+        len(original_data)) if i not in uncorrupted_original_indices]
+    unmatched_ras_indices = [i for i in range(
+        len(ras_data)) if i not in uncorrupted_ras_indices]
+
+    print(
+        f"Uncorrupted Original Data Count: {len(uncorrupted_original_indices)}")
+    print(f"Uncorrupted RAS Data Count: {len(uncorrupted_ras_indices)}")
+    print(f"Remaining Original Data Count: {len(corrupted_original_indices)}")
+    print(f"Remaining RAS Data Count: {len(unmatched_ras_indices)}")
+
+    # 3. OPTIMIZATION: Create a dictionary grouping RAS indices by a (query, category) signature
+    ras_signature_map = defaultdict(list)
+    for ri in unmatched_ras_indices:
+        row = ras_data[ri]
+        signature = (row.get('query'), row.get('category'))
+        ras_signature_map[signature].append(ri)
+
+    # 4. OPTIMIZATION: Single pass to patch corrupted data using the signature map
+    for oi in corrupted_original_indices:
+        row = original_data[oi]
+        signature = (row.get('query'), row.get('category'))
+
+        # Instantly fetch matching RAS indices
+        matches = ras_signature_map.get(signature, [])
+
+        if len(matches) == 1:
+            # Exact match found, patch the ID
+            original_data[oi]['id'] = ras_data[matches[0]]['id']
+        elif len(matches) > 1:
+            print(f"Original index {oi} has multiple mappings: {matches}")
+
+    # Save the patched data
     with open("safeqwen_results/responses_safeqwen_7b_fp16_patched.json", 'w') as f:
-        json.dump(patched_data, f, indent=4)
+        json.dump(original_data, f, indent=4)
+
+    print("Patching complete!")
+
+
+def check_patched_data():
+    patched_data = load_json(
+        RESULTS_BASE_PATH / "responses_safeqwen_7b_fp16_patched.json")
+    assert patched_data is not None, "Failed to load patched data."
+
+    # check if multiple enntries have the same id
+    id_counts = defaultdict(int)
+    for item in patched_data:
+        if 'id' in item:
+            id_counts[item['id']] += 1
+    duplicates = {id: count for id, count in id_counts.items() if count > 1}
+    if duplicates:
+        print(f"Duplicate IDs found: {duplicates}")
+    else:
+        print("No duplicate IDs found in patched data.")
+
+
+def remove_cudaerror_rows(path):
+    data = load_json(path)
+    assert data is not None, "Failed to load data."
+
+    filtered_data = [item for item in data if item["response"].strip().lower().find(
+        "cuda out of memory") == -1]
+
+    print(
+        f"Removed {len(data) - len(filtered_data)} rows with CUDA OOM errors.")
+
+    with open(path.with_name(path.stem + "_filtered.json"), 'w') as f:
+        json.dump(filtered_data, f, indent=4)
+
+    print(f"Filtered data saved to {path.with_name(path.stem + '_filtered.json')}")
+
+
+def process_all_cudaerror_rows():
+    paths = [
+        RESULTS_BASE_PATH / "responses_safeqwen_7b_fp16_patched.json",
+        RESULTS_BASE_PATH / "responses_safeqwen_7b_fp16_ras_full.json",
+        RESULTS_BASE_PATH / "responses_safeqwen_7b_bitsandbytes4bit.json",
+        # RESULTS_BASE_PATH / "responses_safeqwen_7b_bitsandbytes4bit_ras_full.json",
+        RESULTS_BASE_PATH / "responses_safeqwen_7b_bitsandbytes4bit_fp4.json",
+        RESULTS_BASE_PATH / "responses_safeqwen_7b_bitsandbytes4bit_fp4_ras_full.json"
+    ]
+
+    for path in paths:
+        remove_cudaerror_rows(path)
 
 
 def get_names_of_modules(model) -> List[str]:
@@ -307,9 +413,7 @@ def get_names_of_modules(model) -> List[str]:
     return [name for name, _ in model.named_modules()]
 
 
-if __name__ == "__main__":
-    # all_analysis()
-
+def analyze_model_modules():
     import torch
     from transformers import (
         AutoModelForVision2Seq,
@@ -318,7 +422,7 @@ if __name__ == "__main__":
         Qwen2_5_VLProcessor,
         BitsAndBytesConfig,
     )
-    
+
     model_id = "etri-vilab/SafeQwen2.5-VL-7B"
     proc_id = "Qwen/Qwen2.5-VL-7B-Instruct"
 
@@ -336,7 +440,20 @@ if __name__ == "__main__":
     proc = AutoProcessor.from_pretrained(proc_id)
 
     module_names = get_names_of_modules(model)
-    
+
     print("Module Names in SafeQwen:")
     for name in module_names:
         print(name)
+
+
+if __name__ == "__main__":
+
+    ID_TO_SAFENESS_MAPPING = build_index_to_safenesscombination_mapping()
+
+    # data cleaning - already done, no need to run again
+    # find_sampleid_to_id_mapping_optimized()
+    # check_patched_data()
+    # process_all_cudaerror_rows()
+
+    # analysis
+    all_analysis()
