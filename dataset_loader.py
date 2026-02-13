@@ -122,6 +122,28 @@ class HoliSafeBenchLoader:
         
         return stats
 
+    def get_id_safeness_mapping(self) -> Dict[int, str]:
+        """Get a mapping from sample ID to safeness combination"""
+        mapping = {}
+
+        index_slice = self.dataset['test']['id']
+        sample_slice = self.dataset['test']['type']
+
+        for idx, safeness in zip(index_slice, sample_slice):
+            mapping[idx] = safeness
+        return mapping
+    
+    def get_id_field_mapping(self, field: str) -> Dict[int, str]:
+        """Get a mapping from sample ID to field in dataset"""
+        mapping = {}
+
+        index_slice = self.dataset['test']['id']
+        sample_slice = self.dataset['test'][field]
+
+        for idx, category in zip(index_slice, sample_slice):
+            mapping[idx] = category
+        return mapping
+
 
 if __name__ == "__main__":
     # Test the loader
