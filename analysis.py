@@ -310,10 +310,33 @@ def get_names_of_modules(model) -> List[str]:
 if __name__ == "__main__":
     # all_analysis()
 
-    from safeqwen_wrapper import SafeQwen25VLWrapper
-    wrapper = SafeQwen25VLWrapper(model_size="7B", device="cpu", quantization="bitsandbytes4bit_fp4")
-    model = wrapper.model
+    import torch
+    from transformers import (
+        AutoModelForVision2Seq,
+        AutoProcessor,
+        Qwen2_5_VLForConditionalGeneration,
+        Qwen2_5_VLProcessor,
+        BitsAndBytesConfig,
+    )
+    
+    model_id = "etri-vilab/SafeQwen2.5-VL-7B"
+    proc_id = "Qwen/Qwen2.5-VL-7B-Instruct"
+
+    qt = "nf4"
+    cfg = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type=qt,
+        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_use_double_quant=True,
+    )
+    model = AutoModelForVision2Seq.from_pretrained(
+        model_id, quantization_config=cfg,
+        device_map="auto", trust_remote_code=True,
+    )
+    proc = AutoProcessor.from_pretrained(proc_id)
+
     module_names = get_names_of_modules(model)
+    
     print("Module Names in SafeQwen:")
     for name in module_names:
         print(name)
