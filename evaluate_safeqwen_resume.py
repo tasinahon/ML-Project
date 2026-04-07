@@ -5,7 +5,9 @@ Saves progress incrementally to prevent data loss from crashes
 
 import argparse
 import json
+import os
 from pathlib import Path
+import tempfile
 import torch
 import gc
 from tqdm import tqdm
@@ -17,15 +19,62 @@ from gemma_judge import GemmaJudge
 def load_existing_results(filepath):
     """Load existing results if they exist"""
     if filepath.exists():
-        with open(filepath, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            print(f"Warning: Could not parse {filepath.name} (possibly interrupted write). Ignoring file.")
+            return []
     return []
 
 
-def save_results(results, filepath):
-    """Save results to file"""
-    with open(filepath, 'w', encoding='utf-8') as f:
-        json.dump(results, f, indent=2, ensure_ascii=False)
+def save_results_atomic(results, filepath):
+    """Atomically save results to avoid corruption on interruption."""
+    filepath = Path(filepath)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=filepath.parent, delete=False) as tmp:
+        json.dump(results, tmp, indent=2, ensure_ascii=False)
+        tmp.flush()
+        os.fsync(tmp.fileno())
+        tmp_path = tmp.name
+
+    os.replace(tmp_path, filepath)
+
+
+def append_jsonl_atomic(record, filepath):
+    """Append one JSONL record with flush+fsync so progress survives crashes."""
+    filepath = Path(filepath)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    with open(filepath, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def load_checkpoint_jsonl(filepath):
+    """Load checkpoint records; tolerate truncated/corrupt last line."""
+    filepath = Path(filepath)
+    if not filepath.exists():
+        return []
+
+    records = []
+    corrupt_lines = 0
+    with open(filepath, 'r', encoding='utf-8') as f:
+        for line_number, line in enumerate(f, 1):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            try:
+                records.append(json.loads(stripped))
+            except json.JSONDecodeError:
+                corrupt_lines += 1
+                print(f"Warning: Skipping corrupt checkpoint line {line_number} in {filepath.name}")
+
+    if corrupt_lines > 0:
+        print(f"Recovered {len(records)} valid checkpoint records ({corrupt_lines} corrupt lines skipped)")
+
+    return records
 
 
 def evaluate_safeqwen_resume(args):
@@ -41,8 +90,14 @@ def evaluate_safeqwen_resume(args):
         suffix = f"{args.quantization}{args.bits}bit"
     else:
         suffix = "fp16"
+
+    if args.quantization == "bitsandbytes" and args.quant_scope == "vision_only":
+        suffix += "_visiononly"
+    elif args.quantization == "bitsandbytes" and args.quant_scope == "llm_only":
+        suffix += "_llmonly"
     
     responses_file = output_dir / f"responses_safeqwen_{args.model_size.lower()}_{suffix}.json"
+    checkpoint_file = output_dir / f"responses_safeqwen_{args.model_size.lower()}_{suffix}.checkpoint.jsonl"
     
     print(f"\n{'='*80}")
     print(f"SafeQwen2.5-VL Evaluation with Resume Support")
@@ -55,8 +110,19 @@ def evaluate_safeqwen_resume(args):
     num_samples = args.max_samples if args.max_samples else len(dataset.dataset['test'])
     print(f"Loaded dataset with {len(dataset.dataset['test'])} samples")
     
-    # Check for existing results
-    existing_results = load_existing_results(responses_file)
+    # Check for existing results with priority: JSONL checkpoint > final JSON file
+    checkpoint_results = load_checkpoint_jsonl(checkpoint_file)
+    file_results = load_existing_results(responses_file)
+
+    if file_results and len(file_results) >= len(checkpoint_results):
+        existing_results = file_results
+        print(f"\n✅ Loaded {len(existing_results)} results from {responses_file.name}")
+    elif checkpoint_results:
+        existing_results = checkpoint_results
+        print(f"\n✅ Loaded {len(existing_results)} recovered checkpoint records")
+    else:
+        existing_results = []
+
     start_idx = len(existing_results)
     
     if start_idx > 0:
@@ -76,28 +142,53 @@ def evaluate_safeqwen_resume(args):
             quantization=args.quantization,
             bits=args.bits,
             quant_type=args.quant_type,
-            enable_safety_classifier=args.enable_safety_classifier
+            enable_safety_classifier=args.enable_safety_classifier,
+            quant_scope=args.quant_scope
         )
         
-        # Generate responses using batch_generate (more memory efficient)
+        # Generate responses with per-sample durable checkpointing
         print(f"\nGenerating responses from {start_idx} to {num_samples}...")
-        
-        # Get remaining samples
-        remaining_samples = [dataset.get_sample(i) for i in range(start_idx, num_samples)]
-        
-        # Use batch_generate like the original script
-        new_results = model.batch_generate(
-            samples=remaining_samples,
-            max_new_tokens=256,
-            show_progress=True,
-            memory_cleanup_interval=args.memory_cleanup_interval
-        )
-        
-        # Combine with existing results
-        results = existing_results + new_results
-        
+
+        results = list(existing_results)
+        for sample_idx in tqdm(range(start_idx, num_samples), desc="SafeQwen generation"):
+            sample = dataset.get_sample(sample_idx)
+
+            try:
+                result = model.generate(
+                    image=sample['image'],
+                    query=sample['query'],
+                    max_new_tokens=256,
+                    do_sample=False
+                )
+                result['id'] = sample.get('id', None)
+                result['category'] = sample.get('category', 'Unknown')
+                result['safeness_combination'] = sample.get('safeness_combination', 'Unknown')
+            except Exception as e:
+                result = {
+                    'response': f"ERROR: {str(e)}",
+                    'safety_scores': None,
+                    'model': model.model_name,
+                    'query': sample['query'],
+                    'id': sample.get('id', None),
+                    'category': sample.get('category', 'Unknown'),
+                    'safeness_combination': sample.get('safeness_combination', 'Unknown')
+                }
+                print(f"Error processing sample {sample.get('id', sample_idx)}: {e}")
+
+            results.append(result)
+            append_jsonl_atomic(result, checkpoint_file)
+
+            # Periodic full snapshot save
+            if args.save_interval > 0 and (sample_idx + 1) % args.save_interval == 0:
+                save_results_atomic(results, responses_file)
+
+            # Memory cleanup
+            if (sample_idx + 1) % args.memory_cleanup_interval == 0:
+                torch.cuda.empty_cache()
+                gc.collect()
+
         # Final save
-        save_results(results, responses_file)
+        save_results_atomic(results, responses_file)
         print(f"\n✅ Saved all {len(results)} responses to {responses_file}")
         
         # Clear model from memory
@@ -131,7 +222,7 @@ def evaluate_safeqwen_resume(args):
                 
                 # Save every N judgments (only if save_interval > 0)
                 if args.save_interval > 0 and (i + 1) % args.save_interval == 0:
-                    save_results(results, responses_file)
+                    save_results_atomic(results, responses_file)
                 
                 # Memory cleanup
                 if (i + 1) % args.memory_cleanup_interval == 0:
@@ -139,7 +230,7 @@ def evaluate_safeqwen_resume(args):
                     gc.collect()
             
             # Final save with judgments
-            save_results(results, responses_file)
+            save_results_atomic(results, responses_file)
             print(f"\n✅ Saved judgments to {responses_file}")
     
     # Compute metrics
@@ -155,6 +246,9 @@ def evaluate_safeqwen_resume(args):
         1 for r in results 
         if any(pattern in r['response'].lower() for pattern in refusal_patterns)
     )
+
+    if len(results) == 0:
+        raise RuntimeError("No results available to score. Check model loading or dataset access.")
     
     metrics = {
         "total_samples": len(results),
@@ -238,6 +332,13 @@ if __name__ == "__main__":
     parser.add_argument("--quantization", type=str, default=None, help="Quantization method (bitsandbytes)")
     parser.add_argument("--bits", type=int, default=4, help="Quantization bits (4 or 8)")
     parser.add_argument("--quant_type", type=str, default="nf4", help="4-bit quantization type (nf4 or fp4)")
+    parser.add_argument(
+        "--quant_scope",
+        type=str,
+        default="all",
+        choices=["all", "vision_only", "llm_only"],
+        help="Quantization scope: all modules, vision-only, or llm-only"
+    )
     parser.add_argument("--max_samples", type=int, default=None, help="Max samples to evaluate")
     parser.add_argument("--use_gemma_judge", action="store_true", help="Use Gemma as LLM judge")
     parser.add_argument("--gemma_model", type=str, default="google/gemma-2-2b-it", help="Gemma model")

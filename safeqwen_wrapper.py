@@ -21,7 +21,8 @@ class SafeQwen25VLWrapper:
         quantization: Optional[str] = None,
         bits: int = 4,
         quant_type: str = "nf4",
-        enable_safety_classifier: bool = True
+        enable_safety_classifier: bool = True,
+        quant_scope: str = "all"
     ):
         """
         Initialize SafeQwen2.5-VL model
@@ -33,12 +34,19 @@ class SafeQwen25VLWrapper:
             bits: 4 or 8 for quantization
             quant_type: "nf4" or "fp4" for 4-bit quantization
             enable_safety_classifier: Whether to use safety classification
+            quant_scope: "all", "vision_only", or "llm_only"
         """
         self.model_size = model_size
         self.quantization = quantization
         self.bits = bits
         self.quant_type = quant_type
         self.enable_safety_classifier = enable_safety_classifier
+        self.quant_scope = quant_scope
+
+        if self.quant_scope not in ["all", "vision_only", "llm_only"]:
+            raise ValueError(
+                f"quant_scope must be 'all', 'vision_only', or 'llm_only', got {self.quant_scope}"
+            )
         
         # Model names
         self.model_name = f"etri-vilab/SafeQwen2.5-VL-{model_size}"
@@ -51,18 +59,33 @@ class SafeQwen25VLWrapper:
             self.device = device
         
         precision_str = f"{quantization}-{bits}bit" if quantization else "FP16"
+        if quantization == "bitsandbytes" and self.quant_scope == "vision_only":
+            precision_str += " (vision-only)"
+        elif quantization == "bitsandbytes" and self.quant_scope == "llm_only":
+            precision_str += " (llm-only)"
         print(f"Loading {self.model_name} on {self.device} ({precision_str})...")
         
         # Load model with quantization if specified
         if quantization == "bitsandbytes":
             from transformers import BitsAndBytesConfig
+
+            skip_modules = None
+            if self.quant_scope == "vision_only":
+                skip_modules = self._build_non_vision_skip_modules()
+                print(f"Using selective quantization: quantizing vision modules only")
+                print(f"Skipping {len(skip_modules)} non-vision modules from quantization")
+            elif self.quant_scope == "llm_only":
+                skip_modules = self._build_vision_skip_modules()
+                print(f"Using selective quantization: quantizing LLM modules only")
+                print(f"Skipping {len(skip_modules)} vision modules from quantization")
             
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=(bits == 4),
                 load_in_8bit=(bits == 8),
                 bnb_4bit_compute_dtype=torch.float16,
                 bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type=quant_type  # "nf4" or "fp4"
+                bnb_4bit_quant_type=quant_type,  # "nf4" or "fp4"
+                llm_int8_skip_modules=skip_modules
             )
             
             self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
@@ -90,6 +113,84 @@ class SafeQwen25VLWrapper:
         print(f"Model loaded successfully!")
         if self.safety_categories:
             print(f"Safety categories available: {len(self.safety_categories)}")
+
+    @staticmethod
+    def _is_vision_module(module_name: str) -> bool:
+        """Heuristic matcher for vision module prefixes in Qwen2.5-VL/SafeQwen."""
+        if not module_name:
+            return False
+
+        vision_prefixes = (
+            "visual",
+            "model.visual",
+            "vision_tower",
+            "model.vision_tower",
+        )
+        return module_name.startswith(vision_prefixes)
+
+    def _build_non_vision_skip_modules(self) -> List[str]:
+        """
+        Build a skip list so bitsandbytes keeps non-vision modules in full precision.
+
+        This performs a temporary CPU load to inspect module names, then unloads it.
+        """
+        print("Building non-vision skip-module list (one-time module scan)...")
+
+        temp_model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            self.model_name,
+            device_map="cpu",
+            torch_dtype=torch.float16,
+            trust_remote_code=True,
+            low_cpu_mem_usage=True,
+        )
+
+        skip_modules = []
+        for module_name, _ in temp_model.named_modules():
+            if not module_name:
+                continue
+            if not self._is_vision_module(module_name):
+                skip_modules.append(module_name)
+
+        del temp_model
+        gc.collect()
+
+        if len(skip_modules) == 0:
+            raise RuntimeError(
+                "Failed to build non-vision skip list; refusing to quantize all modules in vision-only mode."
+            )
+
+        return skip_modules
+
+    def _build_vision_skip_modules(self) -> List[str]:
+        """
+        Build a skip list so bitsandbytes keeps vision modules in full precision.
+        """
+        print("Building vision skip-module list (one-time module scan)...")
+
+        temp_model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            self.model_name,
+            device_map="cpu",
+            torch_dtype=torch.float16,
+            trust_remote_code=True,
+            low_cpu_mem_usage=True,
+        )
+
+        skip_modules = []
+        for module_name, _ in temp_model.named_modules():
+            if not module_name:
+                continue
+            if self._is_vision_module(module_name):
+                skip_modules.append(module_name)
+
+        del temp_model
+        gc.collect()
+
+        if len(skip_modules) == 0:
+            raise RuntimeError(
+                "Failed to build vision skip list; refusing to run llm-only quantization without protected vision modules."
+            )
+
+        return skip_modules
     
     def generate(
         self,
