@@ -2,6 +2,8 @@
 Soft Evaluator — Runs GemmaJudge over response JSON files and writes
 classifications alongside the original data.
 
+Classifications: "direct refusal", "diverted, safe answer", or "harmful compliance".
+
 Usage:
     python soft_evaluator.py <response_file> [<response_file> ...]
 
