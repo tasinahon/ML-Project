@@ -38,7 +38,7 @@ def load_responses(path: str) -> list:
     return data
 
 
-def evaluate_file(judge: GemmaJudge, input_path: str) -> None:
+def evaluate_file(judge: GemmaJudge, input_path: str, batch_size: int) -> None:
     """
     Run the soft judge on a single response file, write results to
     <original_name>_softjudge.json in the same directory.
@@ -61,7 +61,11 @@ def evaluate_file(judge: GemmaJudge, input_path: str) -> None:
         })
 
     # Run classification
-    classifications = judge.batch_classify(samples, show_progress=True)
+    classifications = judge.batch_classify(
+        samples,
+        show_progress=True,
+        batch_size=batch_size,
+    )
 
     # Merge classification into original data
     results = []
@@ -104,7 +108,17 @@ def main():
         action="store_true",
         help="Disable 8-bit quantization for the judge model",
     )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=8,
+        help="Number of samples to evaluate per batch (default: 8)",
+    )
     args = parser.parse_args()
+
+    if args.batch_size < 1:
+        print("Error: --batch-size must be >= 1", file=sys.stderr)
+        sys.exit(1)
 
     # Validate all files exist before loading the model
     for path in args.files:
@@ -120,7 +134,7 @@ def main():
 
     for path in args.files:
         try:
-            evaluate_file(judge, path)
+            evaluate_file(judge, path, batch_size=args.batch_size)
         except Exception as e:
             print(f"Error processing {path}: {e}", file=sys.stderr)
             import traceback
