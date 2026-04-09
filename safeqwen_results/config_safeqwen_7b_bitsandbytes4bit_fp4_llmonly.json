@@ -1,0 +1,14 @@
+{
+  "model_size": "7B",
+  "quantization": "bitsandbytes",
+  "bits": 4,
+  "quant_type": "fp4",
+  "quant_scope": "llm_only",
+  "max_samples": null,
+  "use_gemma_judge": true,
+  "gemma_model": "google/gemma-2-2b-it",
+  "enable_safety_classifier": true,
+  "memory_cleanup_interval": 10,
+  "save_interval": 20,
+  "output_dir": "./safeqwen_results"
+}

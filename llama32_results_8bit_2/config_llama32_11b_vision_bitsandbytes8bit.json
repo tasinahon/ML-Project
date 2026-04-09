@@ -1,0 +1,14 @@
+{
+  "model_id": "meta-llama/Llama-3.2-11B-Vision-Instruct",
+  "quantization": "bitsandbytes",
+  "bits": 8,
+  "quant_type": "int8",
+  "max_samples": null,
+  "max_new_tokens": 256,
+  "use_gemma_judge": true,
+  "gemma_model": "google/gemma-2-2b-it",
+  "memory_cleanup_interval": 10,
+  "save_interval": 20,
+  "output_dir": "./llama32_results_8bit_2",
+  "hf_token": null
+}

@@ -1,0 +1,60 @@
+{
+  "total_samples": 4031,
+  "pattern_refusal_rate": 78.14438104688662,
+  "pattern_asr": 21.85561895311337,
+  "gemma_refusal_rate": 78.06995782684197,
+  "gemma_asr": 21.930042173158025,
+  "safety_classifier_triggered": 0,
+  "safety_classifier_rate": 0.0,
+  "category_metrics": {
+    "specialized_advice": {
+      "total": 589,
+      "pattern_rr": 81.83361629881153,
+      "pattern_asr": 18.166383701188455,
+      "gemma_rr": 81.49405772495756,
+      "gemma_asr": 18.505942275042443
+    },
+    "violence": {
+      "total": 662,
+      "pattern_rr": 80.21148036253777,
+      "pattern_asr": 19.788519637462233,
+      "gemma_rr": 81.2688821752266,
+      "gemma_asr": 18.731117824773413
+    },
+    "hate": {
+      "total": 1143,
+      "pattern_rr": 75.06561679790026,
+      "pattern_asr": 24.93438320209974,
+      "gemma_rr": 75.06561679790026,
+      "gemma_asr": 24.93438320209974
+    },
+    "illegal_activity": {
+      "total": 654,
+      "pattern_rr": 83.18042813455658,
+      "pattern_asr": 16.819571865443425,
+      "gemma_rr": 83.18042813455658,
+      "gemma_asr": 16.819571865443425
+    },
+    "sexual_content": {
+      "total": 187,
+      "pattern_rr": 92.51336898395722,
+      "pattern_asr": 7.4866310160427805,
+      "gemma_rr": 93.04812834224599,
+      "gemma_asr": 6.951871657754011
+    },
+    "self_harm": {
+      "total": 446,
+      "pattern_rr": 52.01793721973094,
+      "pattern_asr": 47.98206278026906,
+      "gemma_rr": 50.672645739910315,
+      "gemma_asr": 49.327354260089685
+    },
+    "privacy": {
+      "total": 350,
+      "pattern_rr": 94.28571428571428,
+      "pattern_asr": 5.714285714285714,
+      "gemma_rr": 93.42857142857143,
+      "gemma_asr": 6.571428571428571
+    }
+  }
+}

@@ -95,6 +95,8 @@ class Llama32VisionWrapper:
                     bnb_4bit_compute_dtype=torch.bfloat16,
                     bnb_4bit_use_double_quant=True,
                     bnb_4bit_quant_type=quant_type,
+                    # TODO: check
+                    llm_int8_skip_modules=["vision_model", "multi_modal_projector"]
                 )
                 self.model = MllamaForConditionalGeneration.from_pretrained(
                     model_id,
@@ -349,7 +351,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_id", type=str, default="meta-llama/Llama-3.2-11B-Vision-Instruct")
     parser.add_argument("--quantization", type=str, default="bitsandbytes", help="bitsandbytes or None")
     parser.add_argument("--bits", type=int, default=4, help="4 or 8")
-    parser.add_argument("--quant_type", type=str, default="fp4", choices=["fp4", "nf4"])
+    parser.add_argument("--quant_type", type=str, default="fp4", choices=["fp4", "nf4", "fp8",  "int8"])
     parser.add_argument("--max_samples", type=int, default=None)
     parser.add_argument("--max_new_tokens", type=int, default=256)
     parser.add_argument("--use_gemma_judge", action="store_true")
