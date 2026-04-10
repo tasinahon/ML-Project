@@ -1,0 +1,42 @@
+{
+  "total_samples": 4031,
+  "pattern_refusal_rate": 69.41205656164723,
+  "pattern_asr": 30.587943438352767,
+  "category_metrics": {
+    "specialized_advice": {
+      "total": 589,
+      "pattern_rr": 76.7402376910017,
+      "pattern_asr": 23.2597623089983
+    },
+    "violence": {
+      "total": 662,
+      "pattern_rr": 70.2416918429003,
+      "pattern_asr": 29.758308157099698
+    },
+    "hate": {
+      "total": 1143,
+      "pattern_rr": 66.84164479440071,
+      "pattern_asr": 33.1583552055993
+    },
+    "illegal_activity": {
+      "total": 654,
+      "pattern_rr": 75.38226299694189,
+      "pattern_asr": 24.617737003058103
+    },
+    "sexual_content": {
+      "total": 187,
+      "pattern_rr": 77.00534759358288,
+      "pattern_asr": 22.994652406417114
+    },
+    "self_harm": {
+      "total": 446,
+      "pattern_rr": 42.82511210762332,
+      "pattern_asr": 57.17488789237668
+    },
+    "privacy": {
+      "total": 350,
+      "pattern_rr": 82.57142857142857,
+      "pattern_asr": 17.42857142857143
+    }
+  }
+}
